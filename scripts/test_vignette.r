@@ -30,7 +30,7 @@ if (packageVersion("amt") < "0.0.6") {
 #' Load packages:
 
 #+warning=FALSE, message=FALSE
-easypackages::libraries("tidyverse", "knitr", "lubridate", 
+easypackages::libraries("tidyverse", "knitr", "lubridate",
                         "amt", "dplyr", "here", "ggplot2")
 opts_chunk$set(fig.width=12,fig.height=4.5, error=TRUE,cache = FALSE)
 
@@ -63,24 +63,25 @@ summary(m1)
 #' 
 summarize_sampling_rate_many(trk, "id")
 dat1 <- trk %>% nest(data = -id)
-dat1
-dat2 <- track_resample(dat1, rate = minutes(10), tolerance = minutes(1))
-dat2
-
-data(iris)
-i2 <- iris %>% nest(data = -Species)
-
-# This is a temporary fix.
+# This is a temporary fix
 class(dat1) <- c("tbl_df", "tbl", "data.frame")
 dat1
 
-class(dat1)
-trk
-n1 <- trk %>% amt::nest(data = c(x_, y_, t_, tod_))
-class(n1)
+dat2 <- dat1 %>% 
+  mutate(dat_resample = map(data, ~ track_resample(., rate = minutes(30), tolerance = minutes(2))))
+dat2
+
+#' Now fit for each animal a RSF
+#' 
+dat2 <- dat2 %>% 
+  mutate(rsf = map(dat_resample, ~ .x %>% random_points %>% extract_covariates(env) %>% 
+                     fit_rsf(case_ ~ elevation + pop_den + forest)))
+dat2 %>% mutate(rsf = map(rsf, ~ broom::tidy(.$model))) %>% 
+  unnest(cols = rsf) %>% 
+  filter(term != "(Intercept)") %>% 
+  ggplot(aes(term, estimate, col = id)) + geom_point()
 
 #' 	
 #' ## Session information:	
 #' 	
 sessioninfo::session_info()
-proc.time() - ptm
