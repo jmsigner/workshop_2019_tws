@@ -29,6 +29,7 @@ dat <- filter(trk, id == "M2")
 
 
 dat <- dat %>% random_points() %>% extract_covariates(env) %>% add_train_test()
+dat %>% nest(data = train_test)
 
 
 class(dat)

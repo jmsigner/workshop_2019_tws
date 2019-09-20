@@ -30,4 +30,4 @@ install.packages(c("knitr", "lubridate", "sf", "raster", "move", "amt",
                    "glmmTMB", "tidyverse"), dep = TRUE)
 ```
 
-5. Open the script named `scripts/test_vignette.r`.  In RStudio, choose `File -> Knit Document`. Select `html` and click `Compile Document`. It took my computer 2.5 minutes to run everything (but, may take longer on your computer depending on its specs).  Please check over the resulting `html` file and send a copy to bsmity13@gmail.com. If you encounter problems, please contact jsigner@gwdg.de. 
+5. Open the script named `scripts/test_vignette.r`.  In RStudio, choose `File -> Knit Document`. Select `html` and click `Compile Document`. It took my computer 2.5 minutes to run everything (but, may take longer on your computer depending on its specs).  Please check over the resulting `html` file (`scripts/test_vignette.html`) and send a copy to bsmity13@gmail.com. If you encounter problems, please contact jsigner@gwdg.de. 
