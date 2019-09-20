@@ -16,7 +16,7 @@ packages_needed <- c("knitr", "lubridate", "maptools", "raster", "move",
                      "glmmTMB", "lme4", "tidyr", "purrr", "glue", "sf", 
                      "here", "moveVis", "devtools", "sessioninfo", 
                      "broom", "tictoc", "maps", "rgeos", "tibble", 
-                     "maptools", "easypackages", "RStoolbox")
+                     "maptools", "easypackages", "wrswrR")
 new_packages <- packages_needed[!(packages_needed %in% 
                                     installed.packages()[,"Package"])]
 if(length(new_packages)) {
