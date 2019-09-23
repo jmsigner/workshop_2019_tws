@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Steps to prepare for the workshop & to make sure your computer is ready to go!
 
-1. Download latest versions of RStudio and R from here:
+1. Download latest versions of RStudio and R from here (**you should be working with R >= 3.5 and RStudio >= 1.2**):
     a. https://cloud.r-project.org/
     b. https://www.rstudio.com/
 2. Download the data and materials for this workshop. There are two options here: 
