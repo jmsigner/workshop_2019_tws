@@ -112,9 +112,36 @@ plot(dat2 %>% random_points())
 dat3 <- dat2 %>% random_points() %>% extract_covariates(env)
 dat3
 
-#' Fit an RSF (this is just wrapper around `glm`)
-m1 <- dat3 %>% fit_rsf(case_ ~ elevation + pop_den + forest)
+#' Fit an RSF 
+m1 <- dat3 %>% mutate(weights = if_else(case_, 1, 1000)) %>% 
+  glm(case_ ~ elevation + pop_den + forest, weights = weights, data = ., family = binomial())
 summary(m1)
+
+
+#' How many random points should we use? We will repeat the what we did before,
+#' but vary the number of random points.
+
+#' The function `random_points()` lets us specify the number of random points as
+#' a factor of the number of observed points. We will try `0.5, 1, 2, 5,
+#' 10, 20`-times as many random points as observed points. To get a sense for the
+#' variability, we will also replicate each fraction 10 times.
+
+# Note: this may take a 2-3 mins to compute
+tictoc::tic()
+dat_np <- tibble(factor = rep(c(0.5, 1, 2, 5, 10, 20), each = 10))
+dat_np <- dat_np %>% mutate(rsf_res = map(factor, ~ {
+  dat2 %>% random_points(factor = .x) %>% extract_covariates(env) %>% 
+    mutate(weights = if_else(case_, 1, 1000)) %>% 
+    glm(case_ ~ elevation + pop_den + forest, weights = weights, data = ., family = binomial()) %>% 
+    broom::tidy()
+}))
+tictoc::toc()
+
+dat_np %>% unnest(cols = rsf_res) %>% 
+  filter(term != "(Intercept)") %>% # we are not interested in the intercept
+  mutate(factor = as.factor(factor)) %>% 
+  ggplot(aes(x = factor, y = estimate)) + geom_point() +
+  facet_wrap(~ term, scales = "free", ncol = 2) 
 
 #' # Fitting Step Selection Functions (SSF)
 #' 
