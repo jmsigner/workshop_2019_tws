@@ -1,5 +1,5 @@
 #' ---
-#' title: "TWS workshop: Coding Sessing 1"
+#' title: "TWS workshop: Coding Session 1"
 #' author: "Avgar, Fieberg & Signer"
 #' date: "September 2019"
 #' output:

@@ -4,6 +4,7 @@ library(amt)
 dat <- read_rds("data/trk.rds")
 
 elevation <- raster("data/raw/elevation/ASTER ASTGTM2 Elevation-20100101120000000-0-0.tif")
+elevation[] <- elevation[] - mean(elevation[], na.rm = TRUE)
 landuse <- raster("data/raw/landuse/landuse_study_area.tif")
 popden <- raster("data/raw/pop_den/pop_den.tif")
 
@@ -19,4 +20,5 @@ elevation <- raster::resample(elevation, landuse)
 popden <- raster::resample(popden, landuse)
 
 st1 <- raster::stack(elevation, landuse, popden, forest)
+names(st1) <- c("elevation", "landuse", "pop_den", "forest")
 write_rds(st1, "data/env_covar.rds", compress = "gz")
