@@ -10,6 +10,12 @@
 #' #    toc_depth: 3
 #' ---
 #' 
+#' Get started and load libraries
+
+library(raster)
+library(tidyverse)
+library(lubridate)
+library(amt)
 
 #' # Dealing with multiple animals
 
@@ -96,14 +102,15 @@ ggplot(res1, aes(sex, mean, ymin = lci, ymax = uci)) + geom_pointrange() +
 #' 
 
 library(glmmTMB)
-mutate(dat_resample = map(data, ~ track_resample(., rate = minutes(30), tolerance = minutes(2))))
+dat2 %>% mutate(dat_resample = map(data, ~ track_resample(., rate = minutes(30), tolerance = minutes(2))))
 
 dat3 <- dat2 %>% 
   mutate(rsf = map(dat_resample, ~ .x %>% random_points %>% extract_covariates(env))) %>% 
   select(id, rsf) %>% unnest(cols = rsf)
 
 # This will take a few minutes again
-m1 <- glmmTMB(case_ ~ elevation + forest + pop_den + (1 + elevation + forest + pop_den | id), 
+#+ fit glmmTMB for RSF
+m1 <- glmmTMB(case_ ~ elevation + forest + pop_den + (1 + elevation  + forest + pop_den | id), 
              data = dat3, family = binomial())
 
 #' Compare the individual models and the fixed effects model
