@@ -11,11 +11,14 @@
 #' ---
 #' 
 #' Get started and load libraries
+knitr::opts_chunk$set(fig.width=12,fig.height=4.5, cache = TRUE)
 
 library(raster)
 library(tidyverse)
 library(lubridate)
 library(amt)
+library(glmmTMB)
+library(tictoc)
 
 #' # Dealing with multiple animals
 
@@ -30,6 +33,7 @@ dat1
 
 #' Add a column with the animal's sex
 dat1 <- dat1 %>% mutate(sex = str_sub(id, 1, 1))
+dat1
 
 #' ## RSF
 #' 
@@ -43,11 +47,12 @@ dat2
 #' Now fit for each animal a RSF
 #' 
 dat2 <- dat2 %>% 
-  mutate(rsf = map(dat_resample, ~ .x %>% random_points %>% extract_covariates(env) %>% 
+  mutate(rsf = map(dat_resample, function(x) x %>% random_points %>% extract_covariates(env) %>% 
                      fit_rsf(case_ ~ elevation + pop_den + forest)))
 dat2 <- dat2 %>% mutate(rsf = map(rsf, ~ broom::tidy(.$model))) %>% 
   unnest(cols = rsf) %>% 
   filter(term != "(Intercept)") # remove estimate for the intercept
+dat2
 
 
 #' Plotting results
@@ -69,21 +74,35 @@ pop_ele <- dat2 %>% filter(term == "elevation") %>% pull(estimate)
 
 sample(pop_ele, 8, TRUE)
 mean(sample(pop_ele, 8, TRUE))
-b <- replicate(1e3, mean(sample(pop_ele, 8, TRUE)))
+b <- replicate(1e4, mean(sample(pop_ele, 8, TRUE)))
 hist(b)
 
 #' Now we can calcualte statistics from the bootstrap sample
 mean(b)
-sd(b)
+sd(b) # that is the SE
 quantile(b, prob = c(0.025, 0.975))
 
 # Now for all three terms
+
 res0 <- dat2 %>% select(id, term, estimate) %>% 
-  nest(data = estimate) %>% 
-  mutate(boot = map(data, ~ replicate(1e3, mean(sample(.$estimate, 8, replace = TRUE)))), 
+  nest(data = c(id, estimate)) %>% 
+  mutate(boot = map(data, ~ replicate(1e4, mean(sample(.$estimate, 8, replace = TRUE)))), 
          mean = map_dbl(boot, mean), 
-         lci = map_dbl(boot, quantile, prob = 0.025), 
-         uci = map_dbl(boot, quantile, prob = 0.975))
+         se = map_dbl(boot, sd) )
+res0
+
+#' The same as above, but not breaking correlation between individuals
+
+est <- dat2 %>% select(id, term, estimate) %>% pivot_wider(names_from = term, values_from = estimate) %>% 
+  select(-id)
+est1 <- replicate(1e4, colMeans(sample_n(est, nrow(est), TRUE)))
+est1[1:3, 1:10]
+
+res0 <- tibble(
+  term = rownames(est1), 
+  mean = apply(est1, 1, mean), 
+  se = apply(est1, 1, sd))
+
 
 # Using this approach, we can easily add a second grouping variable (e.g., sex)
 res1 <- dat2 %>% select(sex, term, estimate) %>% 
@@ -92,11 +111,10 @@ res1 <- dat2 %>% select(sex, term, estimate) %>%
          mean = map_dbl(boot, mean), 
          lci = map_dbl(boot, quantile, prob = 0.025), 
          uci = map_dbl(boot, quantile, prob = 0.975))
+res1
   
 ggplot(res1, aes(sex, mean, ymin = lci, ymax = uci)) + geom_pointrange() +
   facet_wrap(~ term, scale = "free", ncol = 2)
-
-# TODO: Plot again availability
 
 #' ## Mixed effects model
 #' 
@@ -107,21 +125,42 @@ dat2 %>% mutate(dat_resample = map(data, ~ track_resample(., rate = minutes(30),
 dat3 <- dat2 %>% 
   mutate(rsf = map(dat_resample, ~ .x %>% random_points %>% extract_covariates(env))) %>% 
   select(id, rsf) %>% unnest(cols = rsf)
+dat3
 
 # This will take a few minutes again
 #+ fit glmmTMB for RSF
-m1 <- glmmTMB(case_ ~ elevation + forest + pop_den + (1 + elevation  + forest + pop_den | id), 
-             data = dat3, family = binomial())
+res1_rsf <- glmmTMB(case_ ~ elevation + forest + pop_den + (1|id)+ (0+elevation+forest  | id),
+                    data = dat3, family = binomial(), doFit=FALSE)
 
-#' Compare the individual models and the fixed effects model
-fixef(m1)[[1]][-1]
-res0
+#' Set variance of random intercept to 10^6
+res1_rsf$parameters$theta[1] <- log(1e3)
+nvar_parm <- length(res1_rsf$parameters$theta)
+res1_rsf$mapArg <- list(theta = factor(c(NA, 1:(nvar_parm - 1))))
 
-summary(m1)
+tictoc::tic()
+res1_rsf <- glmmTMB:::fitTMB(res1_rsf)
+tictoc::toc()
+
+summary(res1_rsf)
+
+#' Interaction with sex
+dat3<-dat3 %>% mutate(male=substr(id,1,1)=="M")
+res1_rsf <- glmmTMB(case_ ~ elevation:male + forest + pop_den + (1|id)+ (0+forest  | id),
+                    data = dat3, family = binomial(), doFit=FALSE)
+
+#' Set variance of random intercept to 10^6
+res1_rsf$parameters$theta[1] <- log(1e3)
+nvar_parm <- length(res1_rsf$parameters$theta)
+res1_rsf$mapArg <- list(theta = factor(c(NA, 1:(nvar_parm - 1))))
+
+tictoc::tic()
+res1_rsf <- glmmTMB:::fitTMB(res1_rsf)
+tictoc::toc()
+
+summary(res1_rsf)
 
 
 #' # Step-Selection Functions
-
 env <- read_rds(here::here("data/env_covar.rds"))
 trk <- read_rds(here::here("data/trk.rds"))
 
@@ -145,12 +184,11 @@ dat2 <- dat2 %>%
   mutate(ssf = map(dat_resample, ~ .x %>% steps_by_burst %>% 
                      random_steps %>% extract_covariates(env) %>% 
                      fit_ssf(case_ ~ elevation + pop_den + forest + strata(step_id_))))
-dat2 <- dat2 %>% mutate(ssf = map(ssf, ~ broom::tidy(.$model))) %>% 
+res_ind <- dat2 %>% mutate(ssf = map(ssf, ~ broom::tidy(.$model))) %>% 
   unnest(cols = ssf) 
 
 # Bootstrap coefficients 
-
-res1 <- dat2 %>% select(term, estimate) %>% 
+res1 <- res_ind %>% select(term, estimate) %>% 
   nest(data = estimate) %>% 
   mutate(boot = map(data, ~ replicate(1e3, mean(sample(.$estimate, 8, replace = TRUE)))), 
          mean = map_dbl(boot, mean), 
@@ -159,6 +197,7 @@ res1 <- dat2 %>% select(term, estimate) %>%
 res1
 
 
+#' ### Poisosn trick
 #' Next, we will use the Poisson trick and fit a poisson regression
 dat1
 dat2 <- dat1 %>% 
@@ -204,18 +243,16 @@ toc()
 #' 
 
 # Mean coefficient from individual fits 
-ssf_coefs <- res0 %>% select(id, term, data) %>% unnest(cols = data) 
-ssf_coefs %>%  group_by(term) %>% summarise(
+ssf_coefs <- res_ind %>% select(id, term, estimate) %>% 
+  group_by(term) %>% summarise(
   mean = mean(estimate), 
   se = sd(estimate) / sqrt(n()))
 
+res_ind
+
+
 # Population mean coefficient from mixed modeL
-summary(res1_ssf)$coef$cond[-1,]
-
-
-#'Compare variance of individual esimtates to variance component from mixed model.
-# Variance of coefficientS from individual fits
-ssf_coefs %>% group_by(term) %>% summarize(var = var(estimate), sd = sd(estimate))
+summary(res1_ssf)$coef$cond[-1, "Estimate"]
 
 # Variance of coefficientS from mixed model
 summary(res1_ssf)$varcor #var
@@ -226,10 +263,10 @@ summary(res1_ssf)$varcor #var
 
 comp <- bind_rows(
   tibble(
-    id = ssf_coefs$id,
-    term = ssf_coefs$term, 
-    estimate = ssf_coefs$estimate, 
-    method = rep("ind", nrow(ssf_coefs))
+    id = res_ind$id,
+    term = res_ind$term, 
+    estimate = res_ind$estimate, 
+    method = rep("ind", nrow(res_ind))
   ), 
   coef(res1_ssf)$cond$id[ , -1] %>% rownames_to_column("id") %>% 
     pivot_longer(-id, names_to = "term", values_to = "estimate") %>% 
@@ -239,12 +276,6 @@ comp <- bind_rows(
 comp %>% ggplot(aes(id, estimate, col = method)) + geom_point() +
   facet_wrap(~ term, scale = "free", ncol = 2)
 
-#' Note here that a few coefficients fo relevation and popD show considerable shrinkage. These are coefficients with large SEs as seen by inspecting the individual fits.
-#+fig.width=14, fig.height=6
-ggplot(data=allests, 
-       aes(x=id, y=Estimate, col=method))+
-  geom_point(size=3.5, position=position_dodge(width=0.3))+
-  xlab("")+ylab(expression(hat(beta)))+facet_wrap(~term)
 
 
 #' 	
