@@ -23,7 +23,7 @@ if(length(new_packages)) {
   install.packages(new_packages, repos = "https://cloud.r-project.org")
 }
 
-if (packageVersion("amt") < "0.0.6") {
+if (packageVersion("amt") < "0.0.7") {
   install.packages("amt", repos = "https://cloud.r-project.org")
 }
 
